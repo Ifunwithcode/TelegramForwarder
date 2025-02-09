@@ -4,16 +4,16 @@
 
 ---
 
-<div align="center">
+<div div align=="center">
 
 [![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)][docker-url] [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-4CAF50?style=flat-square)](https://github.com/Heavrnl/TelegramForwarder/blob/main/LICENSE)
 
 [docker-url]: https://hub.docker.com/r/heavrnl/telegramforwarder
 
-</divdiv>
+</div>
 
 ## 简介
-Telegram 转发器是一个消息转发工具，只需要你的账号加入频道/群聊即可以将指定聊天中的消息转发到其他聊天，不需要bot也加入。可用于Telegram 转发器是一个消息转发工具，只需要你的账号加入频道/群聊即可以将指定聊天中的消息转发到其他聊天，不需要bot也加入。可用于Telegram 转发器是一个消息转发工具，只需要你的账号加入频道/群聊即可以将指定聊天中的消息转发到其他聊天，不需要bot也加入。可用于Telegram 转发器是一个消息转发工具，只需要你的账号加入频道/群聊即可以将指定聊天中的消息转发到其他聊天，不需要bot也加入。可用于**信息流整合过滤**，，，，**消息提醒**，，，，**内容收藏**等多种场景。等多种场景。等多种场景。等多种场景。
+Telegram 转发器是一个消息转发工具，只需要你的账号加入频道/群聊即可以将指定聊天中的消息转发到其他聊天，不需要bot也加入。可用于**信息流整合过滤**，**消息提醒**，**内容收藏**等多种场景。
 
 - 🔄 **多源转发**：支持从多个来源转发到指定目标
 - 🔍 **关键词过滤**：支持白名单和黑名单模式
@@ -175,7 +175,7 @@ TG频道的部分消息由于文字嵌入链接，点击会让你确认再跳转
 转发模式分为两种:
 
 1. **用户模式**
-   - 消息转发最完整，保留原始格式
+   - 消息转发最完整，保留原始格式 消息转发最完整，保留原始格式
    - 需要频道/群聊没有限制转发
    - 由于是自身发送消息，无法收到通知提醒
    - 可以使用另一个 Telegram 账号来登录我们的程序，这样主账号就能收到通知
