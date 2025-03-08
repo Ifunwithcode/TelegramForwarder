@@ -1,5 +1,5 @@
 from sqlalchemy.exc import IntegrityError
-from models.models import Keyword, ReplaceRule, ForwardRule
+from models.models import Keyword, ReplaceRule, ForwardRule, MediaTypes, MediaExtensions
 import logging
 import os
 import json
@@ -384,4 +384,185 @@ class DBOperations:
                 deleted_count += 1
                 
         return deleted_count, await self.get_replace_rules(session, rule_id) 
+
+    async def get_media_types(self, session, rule_id):
+        """获取媒体类型设置"""
+        try:
+            rule = session.query(ForwardRule).get(rule_id)
+            if not rule:
+                return False, "规则不存在", None
+            
+            media_types = session.query(MediaTypes).filter_by(rule_id=rule_id).first()
+            if not media_types:
+                # 如果不存在则创建默认设置
+                media_types = MediaTypes(
+                    rule_id=rule_id,
+                    photo=False,
+                    document=False,
+                    video=False,
+                    audio=False,
+                    voice=False
+                )
+                session.add(media_types)
+                session.commit()
+            
+            return True, "获取媒体类型设置成功", media_types
+        except Exception as e:
+            logger.error(f"获取媒体类型设置时出错: {str(e)}")
+            session.rollback()
+            return False, f"获取媒体类型设置时出错: {str(e)}", None
+
+    async def update_media_types(self, session, rule_id, media_types_dict):
+        """更新媒体类型设置"""
+        try:
+            rule = session.query(ForwardRule).get(rule_id)
+            if not rule:
+                return False, "规则不存在"
+            
+            media_types = session.query(MediaTypes).filter_by(rule_id=rule_id).first()
+            if not media_types:
+                media_types = MediaTypes(rule_id=rule_id)
+                session.add(media_types)
+            
+            # 更新媒体类型设置
+            for field in ['photo', 'document', 'video', 'audio', 'voice']:
+                if field in media_types_dict:
+                    setattr(media_types, field, media_types_dict[field])
+            
+            session.commit()
+            return True, "更新媒体类型设置成功"
+        except Exception as e:
+            logger.error(f"更新媒体类型设置时出错: {str(e)}")
+            session.rollback()
+            return False, f"更新媒体类型设置时出错: {str(e)}"
+
+    async def toggle_media_type(self, session, rule_id, media_type):
+        """切换特定媒体类型的启用状态"""
+        try:
+            if media_type not in ['photo', 'document', 'video', 'audio', 'voice']:
+                return False, f"无效的媒体类型: {media_type}"
+                
+            success, msg, media_types = await self.get_media_types(session, rule_id)
+            if not success:
+                return False, msg
+            
+            # 切换状态
+            current_value = getattr(media_types, media_type)
+            setattr(media_types, media_type, not current_value)
+            
+            session.commit()
+            return True, f"媒体类型 {media_type} 切换为 {not current_value}"
+        except Exception as e:
+            logger.error(f"切换媒体类型时出错: {str(e)}")
+            session.rollback()
+            return False, f"切换媒体类型时出错: {str(e)}"
+
+    async def add_media_extensions(self, session, rule_id, extensions):
+        """添加媒体扩展名
+        
+        Args:
+            session: 数据库会话
+            rule_id: 规则ID
+            extensions: 扩展名列表，比如 ['jpg', 'png', 'pdf']
+        
+        Returns:
+            (bool, str): 成功状态和消息
+        """
+        try:
+            added_count = 0
+            for ext in extensions:
+                # 确保扩展名不带点，去除可能存在的点
+                ext = ext.lstrip('.')
+                
+                # 检查是否已存在相同的扩展名
+                existing = session.execute(
+                    text("SELECT id FROM media_extensions WHERE rule_id = :rule_id AND extension = :extension"),
+                    {"rule_id": rule_id, "extension": ext}
+                )
+                
+                if existing.first() is None:
+                    # 添加新的扩展名
+                    new_extension = MediaExtensions(rule_id=rule_id, extension=ext)
+                    session.add(new_extension)
+                    added_count += 1
+            
+            if added_count > 0:
+                session.commit()
+                return True, f"成功添加 {added_count} 个媒体扩展名"
+            else:
+                return False, "所有扩展名已存在，未添加任何新扩展名"
+        
+        except Exception as e:
+            session.rollback()
+            logger.error(f"添加媒体扩展名失败: {str(e)}")
+            return False, f"添加媒体扩展名失败: {str(e)}"
+
+    async def get_media_extensions(self, session, rule_id):
+        """获取规则的媒体扩展名列表
+        
+        Args:
+            session: 数据库会话
+            rule_id: 规则ID
+        
+        Returns:
+            list: 媒体扩展名对象列表
+        """
+        try:
+            # 使用SQLAlchemy文本SQL查询，不需要await
+            result = session.execute(
+                text("SELECT id, extension FROM media_extensions WHERE rule_id = :rule_id ORDER BY id"),
+                {"rule_id": rule_id}
+            )
+            
+            # 构建返回结果
+            extensions = []
+            for row in result:
+                extensions.append({
+                    "id": row[0],
+                    "extension": row[1]
+                })
+            
+            # 返回扩展名列表
+            return extensions
+        
+        except Exception as e:
+            # 记录错误并返回空列表
+            logger.error(f"获取媒体扩展名失败: {str(e)}")
+            return []
+
+    async def delete_media_extensions(self, session, rule_id, indices):
+        """删除媒体扩展名
+        
+        Args:
+            session: 数据库会话
+            rule_id: 规则ID
+            indices: 要删除的扩展名ID列表
+        
+        Returns:
+            (bool, str): 成功状态和消息
+        """
+        try:
+            if not indices:
+                return False, "未指定要删除的扩展名"
+            
+            for index in indices:
+                # 查找并删除扩展名
+                result = session.execute(
+                    text("SELECT id FROM media_extensions WHERE id = :id AND rule_id = :rule_id"),
+                    {"id": index, "rule_id": rule_id}
+                )
+                
+                extension = result.first()
+                if extension:
+                    session.execute(
+                        text("DELETE FROM media_extensions WHERE id = :id"),
+                        {"id": extension[0]}
+                    )
+            
+            session.commit()
+            return True, f"成功删除 {len(indices)} 个媒体扩展名"
+        except Exception as e:
+            session.rollback()
+            logger.error(f"删除媒体扩展名失败: {str(e)}")
+            return False, f"删除媒体扩展名失败: {str(e)}"
 

@@ -9,6 +9,8 @@ import asyncio
 import logging
 from models.db_operations import DBOperations
 from scheduler.summary_scheduler import SummaryScheduler
+from scheduler.chat_updater import ChatUpdater
+from handlers.bot_handler import send_welcome_message
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,7 @@ phone_number = os.getenv('PHONE_NUMBER')
 db_ops = None
 
 scheduler = None
+chat_updater = None
 
 
 async def init_db_ops():
@@ -59,7 +62,7 @@ setup_listeners(user_client, bot_client)
 
 async def start_clients():
     # 初始化 DBOperations
-    global db_ops, scheduler
+    global db_ops, scheduler, chat_updater
     db_ops = await DBOperations.create()
 
     try:
@@ -79,9 +82,13 @@ async def start_clients():
         # 创建并启动调度器
         scheduler = SummaryScheduler(user_client, bot_client)
         await scheduler.start()
+        
+        # 创建并启动聊天信息更新器
+        chat_updater = ChatUpdater(user_client)
+        await chat_updater.start()
 
         # 发送欢迎消息
-        from handlers.bot_handler import send_welcome_message
+
         await send_welcome_message(bot_client)
 
         # 等待两个客户端都断开连接
@@ -94,7 +101,11 @@ async def start_clients():
         if db_ops and hasattr(db_ops, 'close'):
             await db_ops.close()
         # 停止调度器
-        scheduler.stop()
+        if scheduler:
+            scheduler.stop()
+        # 停止聊天信息更新器
+        if chat_updater:
+            chat_updater.stop()
 
 
 async def register_bot_commands(bot):
@@ -157,6 +168,14 @@ async def register_bot_commands(bot):
         BotCommand(
             command='remove_keyword',
             description='删除关键字'
+        ),
+        BotCommand(
+            command='remove_keyword_by_id',
+            description='按ID删除关键字'
+        ),
+        BotCommand(
+            command='remove_all_keyword',
+            description='删除当前频道绑定的所有规则的指定关键字'
         ),
         # 替换规则管理
         BotCommand(
@@ -233,6 +252,23 @@ async def register_bot_commands(bot):
             command='copy_replace',
             description='复制参数规则的替换规则到当前规则'
         ),
+        BotCommand(
+            command='copy_rule',
+            description='复制参数规则到当前规则'
+        ),
+        BotCommand(
+            command='changelog',
+            description='查看更新日志'
+        ),
+        BotCommand(
+            command='list_rule',
+            description='列出所有转发规则'
+        ),
+        BotCommand(
+            command='delete_rule',
+            description='删除转发规则'
+        ),
+
 
         # BotCommand(
         #     command='clear_all',

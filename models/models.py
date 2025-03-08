@@ -4,8 +4,9 @@ from sqlalchemy.orm import relationship, sessionmaker
 from enums.enums import ForwardMode, PreviewMode, MessageMode, AddMode, HandleMode
 import logging
 import os
+from dotenv import load_dotenv
 
-
+load_dotenv()
 Base = declarative_base()
 
 class Chat(Base):
@@ -43,6 +44,12 @@ class ForwardRule(Base):
     is_filter_user_info = Column(Boolean, default=False)  # 是否过滤用户信息
     handle_mode = Column(Enum(HandleMode), nullable=False, default=HandleMode.FORWARD) # 处理模式,编辑模式和转发模式，默认转发
     enable_comment_button = Column(Boolean, default=False)  # 是否添加对应消息的评论区直达按钮
+    enable_media_type_filter = Column(Boolean, default=False)  # 是否启用媒体类型过滤
+    enable_media_size_filter = Column(Boolean, default=False)  # 是否启用媒体大小过滤
+    max_media_size = Column(Integer, default=os.getenv('DEFAULT_MAX_MEDIA_SIZE', 10))  # 媒体大小限制，单位MB
+    is_send_over_media_size_message = Column(Boolean, default=True)  # 超过限制的媒体是否发送提示消息
+    enable_extension_filter = Column(Boolean, default=False)  # 是否启用媒体扩展名过滤
+    extension_filter_mode = Column(Enum(AddMode), nullable=False, default=AddMode.BLACKLIST)  # 媒体扩展名过滤模式，默认黑名单
     # AI相关字段
     is_ai = Column(Boolean, default=False)  # 是否启用AI处理
     ai_model = Column(String, nullable=True)  # 使用的AI模型
@@ -64,6 +71,8 @@ class ForwardRule(Base):
     target_chat = relationship('Chat', foreign_keys=[target_chat_id], back_populates='target_rules')
     keywords = relationship('Keyword', back_populates='rule')
     replace_rules = relationship('ReplaceRule', back_populates='rule')
+    media_types = relationship('MediaTypes', uselist=False, back_populates='rule', cascade="all, delete-orphan")
+    media_extensions = relationship('MediaExtensions', back_populates='rule', cascade="all, delete-orphan")
 
 
 class Keyword(Base):
@@ -99,9 +108,97 @@ class ReplaceRule(Base):
         UniqueConstraint('rule_id', 'pattern', 'content', name='unique_rule_pattern_content'),
     )
 
+class MediaTypes(Base):
+    __tablename__ = 'media_types'
+
+    id = Column(Integer, primary_key=True)
+    rule_id = Column(Integer, ForeignKey('forward_rules.id'), nullable=False, unique=True)
+    photo = Column(Boolean, default=False)
+    document = Column(Boolean, default=False)
+    video = Column(Boolean, default=False)
+    audio = Column(Boolean, default=False)
+    voice = Column(Boolean, default=False)
+
+    # 关系
+    rule = relationship('ForwardRule', back_populates='media_types')
+
+
+class MediaExtensions(Base):
+    __tablename__ = 'media_extensions'
+
+    id = Column(Integer, primary_key=True)
+    rule_id = Column(Integer, ForeignKey('forward_rules.id'), nullable=False)
+    extension = Column(String, nullable=False)  # 存储不带点的扩展名，如 "jpg", "pdf"
+
+    # 关系
+    rule = relationship('ForwardRule', back_populates='media_extensions')
+
+    # 添加唯一约束
+    __table_args__ = (
+        UniqueConstraint('rule_id', 'extension', name='unique_rule_extension'),
+    )
+
+
 def migrate_db(engine):
     """数据库迁移函数，确保新字段的添加"""
     inspector = inspect(engine)
+    
+    # 获取当前数据库中所有表
+    existing_tables = inspector.get_table_names()
+    
+    # 连接数据库
+    connection = engine.connect()
+        
+    try:
+        with engine.connect() as connection:
+            # 如果media_types表不存在，创建表
+            if 'media_types' not in existing_tables:
+                logging.info("创建media_types表...")
+                MediaTypes.__table__.create(engine)
+                
+                # 如果forward_rules表中有selected_media_types列，迁移数据到新表
+                if 'selected_media_types' in forward_rules_columns:
+                    logging.info("迁移媒体类型数据到新表...")
+                    # 查询所有规则
+                    rules = connection.execute(text("SELECT id, selected_media_types FROM forward_rules WHERE selected_media_types IS NOT NULL"))
+                    
+                    for rule in rules:
+                        rule_id = rule[0]
+                        selected_types = rule[1]
+                        if selected_types:
+                            # 创建媒体类型记录
+                            media_types_data = {
+                                'photo': 'photo' in selected_types,
+                                'document': 'document' in selected_types,
+                                'video': 'video' in selected_types,
+                                'audio': 'audio' in selected_types,
+                                'voice': 'voice' in selected_types
+                            }
+                            
+                            # 插入数据
+                            connection.execute(
+                                text("""
+                                INSERT INTO media_types (rule_id, photo, document, video, audio, voice)
+                                VALUES (:rule_id, :photo, :document, :video, :audio, :voice)
+                                """),
+                                {
+                                    'rule_id': rule_id,
+                                    'photo': media_types_data['photo'],
+                                    'document': media_types_data['document'],
+                                    'video': media_types_data['video'],
+                                    'audio': media_types_data['audio'],
+                                    'voice': media_types_data['voice']
+                                }
+                            )
+            if 'media_extensions' not in existing_tables:
+                logging.info("创建media_extensions表...")
+                MediaExtensions.__table__.create(engine)
+                
+    except Exception as e:
+        logging.error(f'迁移媒体类型数据时出错: {str(e)}')
+    
+            
+
 
     # 检查forward_rules表的现有列
     forward_rules_columns = {column['name'] for column in inspector.get_columns('forward_rules')}
@@ -129,6 +226,12 @@ def migrate_db(engine):
         'delay_seconds': 'ALTER TABLE forward_rules ADD COLUMN delay_seconds INTEGER DEFAULT 5',
         'handle_mode': 'ALTER TABLE forward_rules ADD COLUMN handle_mode VARCHAR DEFAULT "FORWARD"',
         'enable_comment_button': 'ALTER TABLE forward_rules ADD COLUMN enable_comment_button BOOLEAN DEFAULT FALSE',
+        'enable_media_type_filter': 'ALTER TABLE forward_rules ADD COLUMN enable_media_type_filter BOOLEAN DEFAULT FALSE',
+        'enable_media_size_filter': 'ALTER TABLE forward_rules ADD COLUMN enable_media_size_filter BOOLEAN DEFAULT FALSE',
+        'max_media_size': f'ALTER TABLE forward_rules ADD COLUMN max_media_size INTEGER DEFAULT {os.getenv("DEFAULT_MAX_MEDIA_SIZE", 10)}',
+        'is_send_over_media_size_message': 'ALTER TABLE forward_rules ADD COLUMN is_send_over_media_size_message BOOLEAN DEFAULT TRUE',
+        'enable_extension_filter': 'ALTER TABLE forward_rules ADD COLUMN enable_extension_filter BOOLEAN DEFAULT FALSE',
+        'extension_filter_mode': 'ALTER TABLE forward_rules ADD COLUMN extension_filter_mode VARCHAR DEFAULT "BLACKLIST"',
     }
 
     keywords_new_columns = {
@@ -220,8 +323,11 @@ def migrate_db(engine):
         except Exception as e:
             logging.error(f'更新唯一约束时出错: {str(e)}')
 
+
 def init_db():
     """初始化数据库"""
+    # 创建数据库文件夹
+    os.makedirs('./db', exist_ok=True)
     engine = create_engine('sqlite:///./db/forward.db')
 
     # 首先创建所有表

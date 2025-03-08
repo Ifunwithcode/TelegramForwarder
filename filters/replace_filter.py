@@ -23,7 +23,7 @@ class ReplaceFilter(BaseFilter):
         message_text = context.message_text
 
         #打印context的所有属性
-        logger.info(f"ReplaceFilter处理消息前，context: {context.__dict__}")
+        # logger.info(f"ReplaceFilter处理消息前，context: {context.__dict__}")
         # 如果不需要替换，直接返回
         if not rule.is_replace or not message_text:
             return True
@@ -33,20 +33,22 @@ class ReplaceFilter(BaseFilter):
             for replace_rule in rule.replace_rules:
                 if replace_rule.pattern == '.*':
                     # 全文替换
+                    logger.info(f'执行全文替换:\n原文: "{message_text}"\n替换为: "{replace_rule.content or ""}"')
                     message_text = replace_rule.content or ''
-                    logger.info(f'执行全文替换: "{message_text}"')
                     break  # 如果是全文替换，就不继续处理其他规则
                 else:
                     try:
                         # 正则替换
                         old_text = message_text
+                        matches = re.finditer(replace_rule.pattern, message_text)
                         message_text = re.sub(
                             replace_rule.pattern,
                             replace_rule.content or '',
                             message_text
                         )
                         if old_text != message_text:
-                            logger.info(f'执行部分替换: "{replace_rule.pattern}" -> "{replace_rule.content}"')
+                            matched_texts = [m.group(0) for m in matches]
+                            logger.info(f'执行部分替换:\n原文: "{old_text}"\n匹配内容: {matched_texts}\n替换规则: "{replace_rule.pattern}" -> "{replace_rule.content}"\n替换后: "{message_text}"')
                     except re.error as e:
                         logger.error(f'替换规则格式错误: {replace_rule.pattern}, 错误: {str(e)}')
             
@@ -60,4 +62,5 @@ class ReplaceFilter(BaseFilter):
             context.errors.append(f"替换规则错误: {str(e)}")
             return True  # 即使替换出错，仍然继续处理 
         finally:
-            logger.info(f"ReplaceFilter处理消息后，context: {context.__dict__}")
+            # logger.info(f"ReplaceFilter处理消息后，context: {context.__dict__}")
+            pass

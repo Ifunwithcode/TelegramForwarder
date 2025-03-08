@@ -3,14 +3,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def create_default_configs():
-    """创建默认配置文件"""
-    config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
-    os.makedirs(config_dir, exist_ok=True)
-
-    # 定义默认配置内容
-    default_configs = {
-        'ai_models.txt': """gpt-4o
+# AI模型列表
+AI_MODELS_CONTENT = """gpt-4o
 chatgpt-4o-latest
 gpt-4o-mini
 gpt-4-turbo
@@ -30,6 +24,7 @@ gemini-1.5-flash-8b
 gemini-1.5-pro
 grok-2-latest
 deepseek-chat
+claude-3-7-sonnet-latest
 claude-3-5-sonnet-latest
 claude-3-5-haiku-latest
 claude-3-opus-latest
@@ -43,8 +38,10 @@ qwen-plus
 qwen-plus-latest
 qwen-turbo
 qwen-turbo-latest
-qwen-long""",
-        'summary_times.txt': """00:00
+qwen-long"""
+
+# 汇总时间列表
+SUMMARY_TIMES_CONTENT = """00:00
 00:30
 01:00
 01:30
@@ -92,8 +89,10 @@ qwen-long""",
 22:30
 23:00
 23:30
-23:50""",
-        'delay_times.txt': """1
+23:50"""
+
+# 延迟时间列表
+DELAY_TIMES_CONTENT = """1
 2
 3
 4
@@ -103,6 +102,132 @@ qwen-long""",
 8
 9
 10"""
+
+# 最大媒体大小列表
+MAX_MEDIA_SIZE_CONTENT = """1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+15
+20
+25
+30
+35
+40
+45
+50
+55
+60
+65
+70
+75
+80
+85
+90
+95
+100
+150
+200
+250
+300
+350
+400
+450
+500
+550
+600
+650
+700
+750
+800
+850
+900
+950
+1024
+2048
+"""
+
+MEDIA_EXTENSIONS_CONTENT = """无扩展名
+jpg
+jpeg
+png
+gif
+bmp
+webp
+tiff
+raw
+heic
+svg
+mp4
+avi
+mkv
+mov
+wmv
+flv
+webm
+m4v
+mpeg
+mpg
+3gp
+rmvb
+mp3
+wav
+ogg
+m4a
+aac
+flac
+wma
+opus
+mid
+midi
+txt
+doc
+docx
+pdf
+xls
+xlsx
+ppt
+pptx
+csv
+rtf
+odt
+zip
+rar
+7z
+tar
+gz
+bz2
+exe
+apk
+iso
+bin
+json
+xml
+html
+css
+js
+py
+"""
+
+
+def create_default_configs():
+    """创建默认配置文件"""
+    config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
+    os.makedirs(config_dir, exist_ok=True)
+
+    # 定义默认配置内容
+    default_configs = {
+        'ai_models.txt': AI_MODELS_CONTENT,
+        'summary_times.txt': SUMMARY_TIMES_CONTENT,
+        'delay_times.txt': DELAY_TIMES_CONTENT,
+        'max_media_size.txt': MAX_MEDIA_SIZE_CONTENT,
+        'media_extensions.txt': MEDIA_EXTENSIONS_CONTENT,
     }
 
     # 检查并创建每个配置文件

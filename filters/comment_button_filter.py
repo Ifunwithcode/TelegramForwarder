@@ -7,6 +7,7 @@ from telethon import Button
 from filters.base_filter import BaseFilter
 from telethon.tl.functions.channels import GetFullChannelRequest
 from utils.common import get_main_module
+from difflib import SequenceMatcher
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class CommentButtonFilter(BaseFilter):
         Returns:
             bool: 是否继续处理
         """
-        logger.info(f"CommentButtonFilter处理消息前，context: {context.__dict__}")
+        # logger.info(f"CommentButtonFilter处理消息前，context: {context.__dict__}")
         try:
             # 如果规则不存在或未启用评论按钮功能，直接跳过
             if not context.rule or not context.rule.enable_comment_button:
@@ -34,7 +35,7 @@ class CommentButtonFilter(BaseFilter):
             # 如果消息内容为空，直接跳过
             if not context.original_message_text and not context.event.message.media:
                 return True
-                
+            
             try:
                 # 获取用户客户端而不是Bot客户端
                 main = await get_main_module()
@@ -47,9 +48,18 @@ class CommentButtonFilter(BaseFilter):
                 
                 # 获取频道的真实用户名
                 channel_username = None
+                logger.info(f"获取频道实体: {channel_entity}")
+                logger.info(f"频道属性内容: {channel_entity.__dict__}")
                 if hasattr(channel_entity, 'username') and channel_entity.username:
                     channel_username = channel_entity.username
                     logger.info(f"获取到频道用户名: {channel_username}")
+                elif hasattr(channel_entity, 'usernames') and channel_entity.usernames:
+                    # 获取第一个活跃的用户名
+                    for username_obj in channel_entity.usernames:
+                        if username_obj.active:
+                            channel_username = username_obj.username
+                            logger.info(f"从 usernames 列表获取到频道用户名: {channel_username}")
+                            break
                 
                 # 获取频道ID（去除前缀）
                 channel_id_str = str(channel_entity.id)
@@ -79,8 +89,36 @@ class CommentButtonFilter(BaseFilter):
                     # 获取关联群组实体
                     linked_group = await client.get_entity(linked_group_id)
                     
-                    # 获取频道消息ID
+                    # 检查消息是否属于媒体组
                     channel_msg_id = event.message.id
+                    
+                    if hasattr(event.message, 'grouped_id') and event.message.grouped_id:
+                        logger.info(f"检测到媒体组消息，组ID: {event.message.grouped_id}")
+                        # 获取同一媒体组的所有消息
+                        media_group_messages = []
+                        
+                        try:
+                            # 获取频道历史消息
+                            async for message in client.iter_messages(
+                                channel_entity,
+                                limit=20,  # 限制查询消息数量
+                                offset_date=event.message.date,  # 从当前消息时间开始查询
+                                reverse=False  # 从新到旧
+                            ):
+                                # 检查是否属于同一媒体组
+                                if (hasattr(message, 'grouped_id') and 
+                                    message.grouped_id == event.message.grouped_id):
+                                    media_group_messages.append(message)
+                            
+                            if media_group_messages:
+                                # 找出ID最小的消息
+                                min_id_message = min(media_group_messages, key=lambda x: x.id)
+                                channel_msg_id = min_id_message.id
+                                logger.info(f"使用媒体组中ID最小的消息: {channel_msg_id}")
+                        except Exception as e:
+                            logger.error(f"获取媒体组消息失败: {e}")
+                            # 失败时使用原始消息ID
+                            logger.info(f"使用原始消息ID: {channel_msg_id}")
                     
                     # 添加短暂延迟，等待消息同步完成
                     logger.info("等待2秒，确保消息同步完成...")
@@ -96,6 +134,8 @@ class CommentButtonFilter(BaseFilter):
                         # 私有频道 - 使用ID链接
                         comment_link = f"https://t.me/c/{channel_id_str}/{channel_msg_id}?comment=1"
                         logger.info(f"构建私有频道评论区链接: {comment_link}")
+                    
+
                     
                     # 如果可以获取群组消息，尝试找到精确匹配以提供更好的体验
                     try:
@@ -118,24 +158,27 @@ class CommentButtonFilter(BaseFilter):
                                     logger.info(f"找到完全匹配消息: 群组消息ID {msg.id}")
                                     break
                         
-                        # 2. 如果无法完全匹配，尝试部分匹配
+                        # 2. 如果无法完全匹配，尝试使用SequenceMatcher进行前20字符相似度匹配
                         if not matched_msg and original_message and len(original_message) > 20:
-                            # 使用消息前20个字符作为特征
+                            
                             message_start = original_message[:20]
-                            logger.info(f"尝试部分匹配，使用消息前20个字符: '{message_start}'")
+                            logger.info(f"尝试对前20字符进行相似度匹配: '{message_start}'")
                             
                             for msg in group_messages:
-                                if hasattr(msg, 'message') and msg.message and message_start in msg.message:
-                                    matched_msg = msg
-                                    logger.info(f"找到部分匹配消息: 群组消息ID {msg.id}")
-                                    break
+                                if hasattr(msg, 'message') and msg.message and len(msg.message) > 20:
+                                    msg_start = msg.message[:20]
+                                    similarity = SequenceMatcher(None, message_start, msg_start).ratio()
+                                    if similarity > 0.75:
+                                        matched_msg = msg
+                                        logger.info(f"找到相似度匹配消息: 群组消息ID {msg.id}, 前20字符相似度: {similarity}")
+                                        break
                         
                         # 3. 如果没找到匹配消息，尝试基于时间匹配
                         if not matched_msg and hasattr(event.message, 'date'):
                             message_time = event.message.date
                             logger.info(f"尝试基于时间匹配，原消息时间: {message_time}")
                             
-                            # 获取消息时间前后10分钟内的消息
+                            # 获取消息时间前后1分钟内的消息
                             time_window = 1  # 分钟
                             
                             for msg in group_messages:
@@ -175,6 +218,14 @@ class CommentButtonFilter(BaseFilter):
                     if hasattr(linked_group, 'username') and linked_group.username:
                         group_link = f"https://t.me/{linked_group.username}"
                         logger.info(f"生成群组备用链接: {group_link}")
+
+                    # 将评论区链接保存到context中，供后续过滤器使用
+                    context.comment_link = comment_link
+                    
+                    # 如果是媒体组消息，跳过添加按钮（由ReplyFilter处理）
+                    if context.is_media_group:
+                        logger.info("媒体组消息的评论区按钮将由ReplyFilter处理")
+                        return True
                     
                     # 添加按钮
                     buttons_added = False
@@ -209,4 +260,5 @@ class CommentButtonFilter(BaseFilter):
                 
             return True 
         finally:
-            logger.info(f"CommentButtonFilter处理消息后，context: {context.__dict__}")
+            # logger.info(f"CommentButtonFilter处理消息后，context: {context.__dict__}")
+            pass

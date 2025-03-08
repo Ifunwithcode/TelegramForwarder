@@ -9,7 +9,7 @@ from models.models import Chat, ForwardRule
 import re
 import telethon
 
-from utils.constants import AI_SETTINGS_TEXT
+from utils.constants import AI_SETTINGS_TEXT,MEDIA_SETTINGS_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ async def get_all_rules(session, event):
         return None
 
 
-async def check_keywords(rule, message_text):
+async def check_keywords(rule, message_text, event = None):
     """
     检查消息是否匹配关键字规则
 
@@ -140,6 +140,26 @@ async def check_keywords(rule, message_text):
         bool: 是否应该转发消息
     """
 
+    logger.info(f"是否开启过滤用户选项: {rule.is_filter_user_info}")
+    if rule.is_filter_user_info:
+        username = await get_sender_info(event, rule.id)  # 调用新的函数获取 sender_info
+        name =  (
+                event.sender.title if hasattr(event.sender, 'title')
+                else f"{event.sender.first_name or ''} {event.sender.last_name or ''}".strip()
+                )
+        if username and name:
+            logger.info(f"成功获取用户信息: {username} {name}")
+            message_text = f"{username} {name}:\n{message_text}"
+        elif username:
+            logger.info(f"成功获取用户信息: {username}")
+            message_text = f"{username}:\n{message_text}"
+        elif name:
+            logger.info(f"成功获取用户信息: {name}")
+            message_text = f"{name}:\n{message_text}"
+        else:
+            logger.warning(f"规则 ID: {rule.id} - 无法获取发送者信息")
+            
+        logger.info(f'附带用户信息后的消息: {message_text}')    
 
     logger.info("开始检查关键字规则")
     logger.info(f"当前转发模式: {rule.forward_mode}")
@@ -301,6 +321,9 @@ async def is_admin(channel_id, user_id, client):
         logger.error(f"检查管理员权限时出错: {str(e)}")
         return False
 
+async def get_media_settings_text():
+    """生成媒体设置页面的文本"""
+    return MEDIA_SETTINGS_TEXT
 
 async def get_ai_settings_text(rule):
     """生成AI设置页面的文本"""

@@ -245,6 +245,74 @@ AI_SETTINGS = {
     }
 }
 
+MEDIA_SETTINGS = {
+    'enable_media_type_filter': {
+        'display_name': '媒体类型过滤',
+        'values': {
+            True: '开启',
+            False: '关闭'
+        },
+        'toggle_action': 'toggle_enable_media_type_filter',
+        'toggle_func': lambda current: not current
+    },
+    'selected_media_types': {
+        'display_name': '选择的媒体类型',
+        'toggle_action': 'set_media_types',
+        'toggle_func': None
+    },
+    'enable_media_size_filter': {
+        'display_name': '媒体大小过滤',
+        'values': {
+            True: '开启',
+            False: '关闭'
+        },
+        'toggle_action': 'toggle_enable_media_size_filter',
+        'toggle_func': lambda current: not current
+    },
+    'max_media_size': {
+        'display_name': '媒体大小限制',
+        'values': {
+            None: '5MB',
+            '': '5MB'
+        },
+        'toggle_action': 'set_max_media_size',
+        'toggle_func': None
+    },
+    'is_send_over_media_size_message': {
+        'display_name': '媒体大小超限时发送提醒',
+        'values': {
+            True: '开启',
+            False: '关闭'
+        },
+        'toggle_action': 'toggle_send_over_media_size_message',
+        'toggle_func': lambda current: not current
+    },
+    'enable_extension_filter': {
+        'display_name': '媒体扩展名过滤',
+        'values': {
+            True: '开启',
+            False: '关闭'
+        },
+        'toggle_action': 'toggle_enable_media_extension_filter',
+        'toggle_func': lambda current: not current
+    },
+    'extension_filter_mode': {
+        'display_name': '媒体扩展名过滤模式',
+        'values': {
+            AddMode.BLACKLIST: '黑名单',
+            AddMode.WHITELIST: '白名单'
+        },
+        'toggle_action': 'toggle_media_extension_filter_mode',
+        'toggle_func': lambda current: AddMode.WHITELIST if current == AddMode.BLACKLIST else AddMode.BLACKLIST
+    },
+    'media_extensions': {
+        'display_name': '设置媒体扩展名',
+        'toggle_action': 'set_media_extensions',
+        'toggle_func': None,
+        'values': {}
+    }
+}
+
 async def create_settings_text(rule):
     """创建设置信息文本"""
     text = (
@@ -376,19 +444,25 @@ async def create_buttons(rule):
                 )
             ])
 
+            
+
+            buttons.append([
+                Button.inline(
+                    "🤖 AI设置",
+                    f"ai_settings:{rule.id}"
+                ),
+                Button.inline(
+                    "🎬 媒体设置",
+                    f"media_settings:{rule.id}"
+                )
+            ])
+
+
             # 评论区直达按钮
             buttons.append([
                 Button.inline(
                     f"💬 评论区直达按钮: {RULE_SETTINGS['enable_comment_button']['values'][rule.enable_comment_button]}",
                     f"toggle_enable_comment_button:{rule.id}"
-                )
-            ])
-
-            # AI设置单独一行
-            buttons.append([
-                Button.inline(
-                    "🤖 AI设置",
-                    f"ai_settings:{rule.id}"
                 )
             ])
 
